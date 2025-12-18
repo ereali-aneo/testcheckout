@@ -1,0 +1,9 @@
+This is a test file to demonstrate checkout behavior.
+
+When you create a PR and modify this file, the GitHub Actions workflow
+will show you the difference between:
+
+1. Checkout WITH ref: ${{ github.ref }} (problematic)
+2. Checkout WITHOUT ref (correct)
+
+Main branch version.
