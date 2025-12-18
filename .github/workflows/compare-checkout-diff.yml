@@ -1,0 +1,256 @@
+name: Compare Checkout WITH vs WITHOUT ref
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compare-checkouts:
+    name: "Side-by-side Checkout Comparison"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show GitHub context first
+        run: |
+          echo "================================"
+          echo "GITHUB CONTEXT BEFORE CHECKOUT"
+          echo "================================"
+          echo "Event: ${{ github.event_name }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.sha: ${{ github.sha }}"
+          echo "github.head_ref: ${{ github.head_ref }}"
+          echo "github.base_ref: ${{ github.base_ref }}"
+          echo "github.repository: ${{ github.repository }}"
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "PR head repo: ${{ github.event.pull_request.head.repo.full_name }}"
+            echo "PR number: ${{ github.event.pull_request.number }}"
+          fi
+          echo ""
+
+      # ========================================
+      # CHECKOUT WITH ref: ${{ github.ref }}
+      # ========================================
+      - name: "1️⃣ Checkout WITH ref (problematic)"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          path: checkout-with-ref
+
+      - name: "1️⃣ Analyze checkout WITH ref"
+        run: |
+          echo "================================"
+          echo "CHECKOUT WITH ref: \${{ github.ref }}"
+          echo "================================"
+          cd checkout-with-ref
+          echo "📍 Current directory: $(pwd)"
+          echo ""
+          echo "🔀 Git branches:"
+          git branch -a
+          echo ""
+          echo "📝 Current commit:"
+          git log -1 --pretty=format:"Commit: %H%nAuthor: %an <%ae>%nDate: %ad%nMessage: %s%n"
+          echo ""
+          echo "📊 Git status:"
+          git status
+          echo ""
+          echo "📄 test-file.txt content:"
+          if [ -f test-file.txt ]; then
+            cat test-file.txt
+          else
+            echo "❌ test-file.txt NOT FOUND"
+          fi
+          echo ""
+          echo "🔍 Git describe:"
+          git describe --all --long || echo "No tags"
+          echo ""
+          echo "📌 HEAD points to:"
+          git rev-parse HEAD
+          echo ""
+          cd ..
+
+      # ========================================
+      # CHECKOUT WITHOUT ref (default)
+      # ========================================
+      - name: "2️⃣ Checkout WITHOUT ref (correct)"
+        uses: actions/checkout@v4
+        with:
+          path: checkout-without-ref
+
+      - name: "2️⃣ Analyze checkout WITHOUT ref"
+        run: |
+          echo "================================"
+          echo "CHECKOUT WITHOUT ref (default)"
+          echo "================================"
+          cd checkout-without-ref
+          echo "📍 Current directory: $(pwd)"
+          echo ""
+          echo "🔀 Git branches:"
+          git branch -a
+          echo ""
+          echo "📝 Current commit:"
+          git log -1 --pretty=format:"Commit: %H%nAuthor: %an <%ae>%nDate: %ad%nMessage: %s%n"
+          echo ""
+          echo "📊 Git status:"
+          git status
+          echo ""
+          echo "📄 test-file.txt content:"
+          if [ -f test-file.txt ]; then
+            cat test-file.txt
+          else
+            echo "❌ test-file.txt NOT FOUND"
+          fi
+          echo ""
+          echo "🔍 Git describe:"
+          git describe --all --long || echo "No tags"
+          echo ""
+          echo "📌 HEAD points to:"
+          git rev-parse HEAD
+          echo ""
+          cd ..
+
+      # ========================================
+      # COMPARE THE TWO CHECKOUTS
+      # ========================================
+      - name: "🔍 Compare the differences"
+        run: |
+          echo "================================"
+          echo "COMPARISON"
+          echo "================================"
+          echo ""
+
+          WITH_REF_SHA=$(cd checkout-with-ref && git rev-parse HEAD)
+          WITHOUT_REF_SHA=$(cd checkout-without-ref && git rev-parse HEAD)
+
+          echo "Commit SHA WITH ref:    $WITH_REF_SHA"
+          echo "Commit SHA WITHOUT ref: $WITHOUT_REF_SHA"
+          echo ""
+
+          if [ "$WITH_REF_SHA" == "$WITHOUT_REF_SHA" ]; then
+            echo "✅ SAME commit checked out"
+          else
+            echo "❌ DIFFERENT commits checked out!"
+            echo ""
+            echo "This proves the problem!"
+          fi
+          echo ""
+
+          echo "Branch info WITH ref:"
+          cd checkout-with-ref && git branch -a | head -5
+          cd ..
+          echo ""
+
+          echo "Branch info WITHOUT ref:"
+          cd checkout-without-ref && git branch -a | head -5
+          cd ..
+          echo ""
+
+          # Compare file content
+          echo "Comparing test-file.txt content:"
+          if diff -q checkout-with-ref/test-file.txt checkout-without-ref/test-file.txt > /dev/null 2>&1; then
+            echo "✅ File content is IDENTICAL"
+          else
+            echo "❌ File content is DIFFERENT!"
+            echo ""
+            echo "=== WITH ref ==="
+            cat checkout-with-ref/test-file.txt 2>/dev/null || echo "File not found"
+            echo ""
+            echo "=== WITHOUT ref ==="
+            cat checkout-without-ref/test-file.txt 2>/dev/null || echo "File not found"
+          fi
+
+      # ========================================
+      # DETAILED ANALYSIS FOR PULL REQUESTS
+      # ========================================
+      - name: "📊 Pull Request Analysis (only runs on PRs)"
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "================================"
+          echo "PULL REQUEST SPECIFIC ANALYSIS"
+          echo "================================"
+          echo ""
+          echo "This is a Pull Request event"
+          echo "PR #${{ github.event.pull_request.number }}"
+          echo ""
+          echo "Source (head):"
+          echo "  - Branch: ${{ github.head_ref }}"
+          echo "  - Repo: ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "  - SHA: ${{ github.event.pull_request.head.sha }}"
+          echo ""
+          echo "Target (base):"
+          echo "  - Branch: ${{ github.base_ref }}"
+          echo "  - Repo: ${{ github.repository }}"
+          echo "  - SHA: ${{ github.event.pull_request.base.sha }}"
+          echo ""
+          echo "GitHub Actions uses:"
+          echo "  - github.ref = ${{ github.ref }}"
+          echo "  - github.sha = ${{ github.sha }}"
+          echo ""
+
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]; then
+            echo "✅ This is an INTERNAL PR (same repository)"
+            echo "   Secrets are AVAILABLE"
+          else
+            echo "⚠️  This is a FORK PR (different repository)"
+            echo "   Secrets are NOT AVAILABLE"
+          fi
+          echo ""
+
+          WITH_REF_SHA=$(cd checkout-with-ref && git rev-parse HEAD)
+          WITHOUT_REF_SHA=$(cd checkout-without-ref && git rev-parse HEAD)
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          echo "Expected PR head SHA:        $HEAD_SHA"
+          echo "Checkout WITH ref got:       $WITH_REF_SHA"
+          echo "Checkout WITHOUT ref got:    $WITHOUT_REF_SHA"
+          echo ""
+
+          if [ "$WITHOUT_REF_SHA" == "${{ github.sha }}" ]; then
+            echo "✅ WITHOUT ref correctly checks out github.sha (merge commit)"
+          else
+            echo "⚠️  WITHOUT ref does not match github.sha"
+          fi
+
+      # ========================================
+      # CONCLUSION AND RECOMMENDATION
+      # ========================================
+      - name: "📋 Conclusion"
+        if: always()
+        run: |
+          echo ""
+          echo "================================"
+          echo "CONCLUSION"
+          echo "================================"
+          echo ""
+          echo "Event type: ${{ github.event_name }}"
+          echo ""
+
+          WITH_REF_SHA=$(cd checkout-with-ref && git rev-parse HEAD)
+          WITHOUT_REF_SHA=$(cd checkout-without-ref && git rev-parse HEAD)
+
+          if [ "$WITH_REF_SHA" == "$WITHOUT_REF_SHA" ]; then
+            echo "✅ For ${{ github.event_name }} events, both methods work"
+            echo "   BUT: 'WITHOUT ref' is still preferred for consistency"
+          else
+            echo "❌ DIFFERENT COMMITS CHECKED OUT!"
+            echo "   This is the PROBLEM with using ref: \${{ github.ref }}"
+          fi
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "RECOMMENDATION FOR ARMONIK.CORE"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "REMOVE all instances of:"
+          echo "  ref: \${{ github.ref }}"
+          echo ""
+          echo "From all checkout actions in:"
+          echo "  .github/workflows/build.yml"
+          echo ""
+          echo "This will:"
+          echo "  ✅ Fix pull request support"
+          echo "  ✅ Work for push events"
+          echo "  ✅ Work for internal PRs"
+          echo "  ✅ Work for fork PRs"
+          echo "  ✅ Correctly handle merge commits"
+          echo ""
+          echo "No other changes needed!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
