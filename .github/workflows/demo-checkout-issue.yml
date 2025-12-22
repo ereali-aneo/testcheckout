@@ -194,5 +194,8 @@ jobs:
             - uses: actions/checkout@v4
               with:
                 ref: ${{ github.head_ref || github.ref }}
+
+            the result expected is difference between the 2 behavior
+          
           ================================================================
           EOF
