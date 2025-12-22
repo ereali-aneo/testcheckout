@@ -1,4 +1,4 @@
-name: Demo - Checkout Issue with ref
+name: Demo - Checkout Configurations for Fork PRs
 
 on:
   push:
@@ -9,22 +9,28 @@ on:
       - main
 
 jobs:
-  # This job uses ref: ${{ github.ref }} (PROBLEMATIC for PRs)
-  checkout-with-explicit-ref:
-    name: "Checkout WITH ref (problematic)"
+  # OLD CONFIG from PR #1119 - BREAKS FOR FORKS
+  checkout-old-config:
+    name: "OLD: github.head_ref || github.ref (BREAKS FORKS)"
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
-      - name: Checkout with explicit ref
+      - name: Checkout with old config
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: Show checked out ref info
         run: |
-          echo "=== Checkout WITH ref: \${{ github.ref }} ==="
+          echo "=== OLD CONFIG: ref: github.head_ref || github.ref ==="
           echo "GitHub Event: ${{ github.event_name }}"
+          echo "github.repository: ${{ github.repository }}"
           echo "github.ref: ${{ github.ref }}"
+          echo "github.head_ref: ${{ github.head_ref }}"
           echo "github.sha: ${{ github.sha }}"
+          echo ""
+          echo "Git remote:"
+          git remote -v
           echo ""
           echo "Current git branch:"
           git branch -a
@@ -35,20 +41,28 @@ jobs:
           echo "Git status:"
           git status
 
-  # This job does NOT use ref (CORRECT - lets GitHub Actions decide)
-  checkout-without-ref:
-    name: "Checkout WITHOUT ref (correct)"
+  # NEW CONFIG - FIXES FORKS with empty string
+  checkout-new-config:
+    name: "NEW: event_name check with '' (FIXES FORKS)"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout without explicit ref
+      - name: Checkout with new config
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && '' || github.ref }}
 
       - name: Show checked out ref info
         run: |
-          echo "=== Checkout WITHOUT ref (default behavior) ==="
+          echo "=== NEW CONFIG: ref: event_name == 'pull_request' && '' || github.ref ==="
           echo "GitHub Event: ${{ github.event_name }}"
+          echo "github.repository: ${{ github.repository }}"
           echo "github.ref: ${{ github.ref }}"
+          echo "github.head_ref: ${{ github.head_ref }}"
           echo "github.sha: ${{ github.sha }}"
+          echo "github.event.pull_request.merge_commit_sha: ${{ github.event.pull_request.merge_commit_sha }}"
+          echo ""
+          echo "Git remote:"
+          git remote -v
           echo ""
           echo "Current git branch:"
           git branch -a
@@ -58,50 +72,124 @@ jobs:
           echo ""
           echo "Git status:"
           git status
+
+  # VERSIONNING CONFIG - Uses merge_commit_sha explicitly
+  checkout-versionning-config:
+    name: "VERSIONNING: merge_commit_sha explicit"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with versionning config
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Show checked out ref info
+        run: |
+          echo "=== VERSIONNING CONFIG: ref: merge_commit_sha explicit ==="
+          echo "GitHub Event: ${{ github.event_name }}"
+          echo "github.repository: ${{ github.repository }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.head_ref: ${{ github.head_ref }}"
+          echo "github.sha: ${{ github.sha }}"
+          echo "github.event.pull_request.merge_commit_sha: ${{ github.event.pull_request.merge_commit_sha }}"
+          echo "github.event.pull_request.head.sha: ${{ github.event.pull_request.head.sha }}"
+          echo ""
+          echo "Git remote:"
+          git remote -v
+          echo ""
+          echo "Current git branch:"
+          git branch -a
+          echo ""
+          echo "Current git commit:"
+          git log -1 --oneline
+          echo ""
+          echo "Git status:"
+          git status
+          echo ""
+          echo "Full history (last 5 commits):"
+          git log --oneline -5
 
   # This job explains the differences
   explain-differences:
     name: "Explanation"
     runs-on: ubuntu-latest
-    needs: [checkout-with-explicit-ref, checkout-without-ref]
+    needs: [checkout-old-config, checkout-new-config, checkout-versionning-config]
     if: always()
     steps:
-      - name: Explain the issue
+      - name: Explain the results
         run: |
           cat << 'EOF'
           ================================================================
-          DEMONSTRATION RESULTS
+          DEMONSTRATION RESULTS - Fork PR Checkout Configurations
           ================================================================
 
           Event Type: ${{ github.event_name }}
+          Repository: ${{ github.repository }}
 
-          FOR PUSH EVENTS:
-          ----------------
-          Both methods work because github.ref points to the pushed branch.
+          THE PROBLEM WITH FORKS:
+          -----------------------
+          When a PR comes from a fork (e.g., CACIB-ArmoniK-Admin/ArmoniK.Core → aneoconsulting/ArmoniK.Core):
+          1. GitHub Actions clones the BASE repository (aneoconsulting/ArmoniK.Core)
+          2. The branch from the fork (e.g., "ia/fix-handle-crash") does NOT exist in the base repo
+          3. Using github.head_ref fails with "branch could not be found"
 
-          FOR PULL_REQUEST EVENTS:
+          OLD CONFIG (PR #1119) - BREAKS FOR FORKS:
+          ------------------------------------------
+          ref: ${{ github.head_ref || github.ref }}
+
+          ❌ For fork PRs:
+             - github.head_ref = "ia/fix-handle-crash"
+             - Tries to checkout this branch name
+             - FAILS: branch only exists in fork, not in base repo
+
+          ✅ For same-repo PRs: Works fine
+
+          NEW CONFIG - FIXES FORKS:
           -------------------------
-          WITH ref: ${{ github.ref }}
-            - github.ref = "refs/pull/X/merge"
-            - May checkout incorrect code or fail
-            - Does not work correctly for fork PRs
+          ref: ${{ github.event_name == 'pull_request' && '' || github.ref }}
 
-          WITHOUT ref (default):
-            - GitHub Actions automatically checks out the merge commit
-            - Correctly merges PR code with base branch
-            - Works for both internal and fork PRs
+          ✅ For ALL PRs (fork or same-repo):
+             - Empty string triggers default checkout behavior
+             - Checks out the merge commit created by GitHub
+             - Works because GitHub creates merge commits for all PRs
 
-          RECOMMENDATION:
-          ---------------
-          REMOVE "ref: ${{ github.ref }}" from all checkout actions!
-          Let GitHub Actions handle the ref automatically.
+          ✅ For push events:
+             - Uses github.ref (the pushed branch)
 
-          Good:
-            - uses: actions/checkout@v4
+          VERSIONNING CONFIG - EXPLICIT MERGE COMMIT:
+          -------------------------------------------
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
 
-          Bad:
+          ✅ For ALL PRs:
+             - Explicitly uses the merge commit SHA
+             - Same result as empty string, but more explicit
+             - Ensures codacy/git-version has full context
+
+          ✅ For push events:
+             - Uses github.ref
+
+          REPOSITORY CLONED:
+          ------------------
+          In ALL cases, the repository cloned is the BASE repository (github.repository).
+          The difference is WHAT REF is checked out from that repository.
+
+          RECOMMENDATION FOR ARMONIK.CORE:
+          ---------------------------------
+          ✅ GOOD (for most jobs):
             - uses: actions/checkout@v4
               with:
-                ref: ${{ github.ref }}
+                ref: ${{ github.event_name == 'pull_request' && '' || github.ref }}
+
+          ✅ GOOD (for versionning job):
+            - uses: actions/checkout@v4
+              with:
+                ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
+                fetch-depth: 0
+
+          ❌ BAD (breaks forks):
+            - uses: actions/checkout@v4
+              with:
+                ref: ${{ github.head_ref || github.ref }}
           ================================================================
           EOF
