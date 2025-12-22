@@ -18,6 +18,7 @@ jobs:
       - name: Checkout with old config
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository }}
           ref: ${{ github.head_ref || github.ref }}
 
       - name: Show checked out ref info
@@ -49,6 +50,7 @@ jobs:
       - name: Checkout with new config
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository }}
           ref: ${{ github.event_name == 'pull_request' && '' || github.ref }}
 
       - name: Show checked out ref info
@@ -81,6 +83,7 @@ jobs:
       - name: Checkout with versionning config
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.ref }}
           fetch-depth: 0
 
