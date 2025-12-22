@@ -55,7 +55,7 @@ GitHub Actions automatically:
 
 ## Expected Results
 
-The workflow will show side-by-side:
+The workflow we expect side-by-side:
 - ✅ Correct behavior (without ref)
 - ❌ Problematic behavior (with ref)
 
