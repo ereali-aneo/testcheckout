@@ -1,0 +1,138 @@
+name: Show All GitHub Context
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  show-github-context:
+    name: "Display all ${{ github }} properties"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: |
+          echo "================================"
+          echo "FULL GITHUB CONTEXT (JSON)"
+          echo "================================"
+          echo "$GITHUB_CONTEXT" | jq '.'
+          echo ""
+          echo "================================"
+          echo "INDIVIDUAL PROPERTIES"
+          echo "================================"
+
+      - name: Show individual github properties
+        run: |
+          echo "github.action: ${{ github.action }}"
+          echo "github.action_path: ${{ github.action_path }}"
+          echo "github.action_ref: ${{ github.action_ref }}"
+          echo "github.action_repository: ${{ github.action_repository }}"
+          echo "github.action_status: ${{ github.action_status }}"
+          echo "github.actor: ${{ github.actor }}"
+          echo "github.actor_id: ${{ github.actor_id }}"
+          echo "github.api_url: ${{ github.api_url }}"
+          echo "github.base_ref: ${{ github.base_ref }}"
+          echo "github.env: ${{ github.env }}"
+          echo "github.event_name: ${{ github.event_name }}"
+          echo "github.event_path: ${{ github.event_path }}"
+          echo "github.graphql_url: ${{ github.graphql_url }}"
+          echo "github.head_ref: ${{ github.head_ref }}"
+          echo "github.job: ${{ github.job }}"
+          echo "github.path: ${{ github.path }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.ref_name: ${{ github.ref_name }}"
+          echo "github.ref_protected: ${{ github.ref_protected }}"
+          echo "github.ref_type: ${{ github.ref_type }}"
+          echo "github.repository: ${{ github.repository }}"
+          echo "github.repository_id: ${{ github.repository_id }}"
+          echo "github.repository_owner: ${{ github.repository_owner }}"
+          echo "github.repository_owner_id: ${{ github.repository_owner_id }}"
+          echo "github.repositoryUrl: ${{ github.repositoryUrl }}"
+          echo "github.retention_days: ${{ github.retention_days }}"
+          echo "github.run_id: ${{ github.run_id }}"
+          echo "github.run_number: ${{ github.run_number }}"
+          echo "github.run_attempt: ${{ github.run_attempt }}"
+          echo "github.secret_source: ${{ github.secret_source }}"
+          echo "github.server_url: ${{ github.server_url }}"
+          echo "github.sha: ${{ github.sha }}"
+          echo "github.token: [REDACTED]"
+          echo "github.triggering_actor: ${{ github.triggering_actor }}"
+          echo "github.workflow: ${{ github.workflow }}"
+          echo "github.workflow_ref: ${{ github.workflow_ref }}"
+          echo "github.workflow_sha: ${{ github.workflow_sha }}"
+          echo "github.workspace: ${{ github.workspace }}"
+
+      - name: Show github.event (full event payload)
+        env:
+          EVENT_CONTEXT: ${{ toJson(github.event) }}
+        run: |
+          echo ""
+          echo "================================"
+          echo "GITHUB EVENT PAYLOAD"
+          echo "================================"
+          echo "$EVENT_CONTEXT" | jq '.'
+
+      - name: Show important differences between push and pull_request
+        run: |
+          echo ""
+          echo "================================"
+          echo "KEY DIFFERENCES"
+          echo "================================"
+          echo ""
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "EVENT TYPE: pull_request"
+            echo ""
+            echo "github.ref: ${{ github.ref }}"
+            echo "  → This is refs/pull/X/merge (problematic for checkout)"
+            echo ""
+            echo "github.head_ref: ${{ github.head_ref }}"
+            echo "  → This is the PR source branch name"
+            echo ""
+            echo "github.base_ref: ${{ github.base_ref }}"
+            echo "  → This is the PR target branch (usually main)"
+            echo ""
+            echo "github.event.pull_request.head.repo.full_name: ${{ github.event.pull_request.head.repo.full_name }}"
+            echo "  → Source repository (fork or same repo)"
+            echo ""
+            echo "github.repository: ${{ github.repository }}"
+            echo "  → Target repository"
+            echo ""
+            if [ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]; then
+              echo "✅ INTERNAL PR (same repo) - secrets available"
+            else
+              echo "⚠️  FORK PR - secrets NOT available"
+            fi
+          else
+            echo "EVENT TYPE: ${{ github.event_name }}"
+            echo ""
+            echo "github.ref: ${{ github.ref }}"
+            echo "  → This is the branch ref (e.g., refs/heads/main)"
+            echo ""
+            echo "github.sha: ${{ github.sha }}"
+            echo "  → Commit SHA being built"
+          fi
+
+      - name: Test checkout with and without ref
+        run: |
+          echo ""
+          echo "================================"
+          echo "RECOMMENDATION"
+          echo "================================"
+          echo ""
+          echo "For ArmoniK.Core workflows:"
+          echo ""
+          echo "❌ BAD (current):"
+          echo "    - uses: actions/checkout@v4"
+          echo "      with:"
+          echo "        ref: \${{ github.ref }}"
+          echo ""
+          echo "✅ GOOD (recommended):"
+          echo "    - uses: actions/checkout@v4"
+          echo "      # No ref - let GitHub Actions decide automatically"
+          echo ""
+          echo "This allows:"
+          echo "  • Push events: checkout the pushed branch"
+          echo "  • PR events: checkout the merge commit (PR + base)"
+          echo "  • Works for both internal and fork PRs"

@@ -7,3 +7,13 @@ will show you the difference between:
 2. Checkout WITHOUT ref (correct)
 
 Main branch version.
+
+=== PR Modification Test - Thu Dec 18 15:25:44 CET 2025 ===
+
+This modification will trigger the GitHub Actions workflow.
+The workflow will demonstrate the difference between:
+1. Checkout WITH ref: ${{ github.ref }} (problematic)
+2. Checkout WITHOUT ref (correct)
+
+Check the Actions tab to see the proof!
+
